@@ -1,0 +1,63 @@
+{
+  "document_title": "Independent Contractor Services Agreement",
+  "parties_involved": [
+    "Apex Global Enterprises LLC (Company)",
+    "Jane Doe (Contractor)"
+  ],
+  "overall_risk_score": 95,
+  "risk_summary": "This agreement is highly predatory and extremely high-risk for the Contractor. It permits the Company to withhold payment at its sole discretion, terminate the contract instantly without paying for completed work, claim ownership over the Contractor's personal off-hours intellectual property, and forces the Contractor to assume unlimited liability even for the Company's own negligence.",
+  "clauses": [
+    {
+      "clause_id": "sec_services_compensation",
+      "clause_title": "Services and Compensation",
+      "original_text": "Contractor agrees to perform software development services as assigned by Company. Compensation shall be paid monthly upon Company's sole discretion and satisfaction with deliverables.",
+      "plain_english": "You will do software development work, but the company only has to pay you if they feel like it and are happy with your work.",
+      "risk_level": "HIGH",
+      "risk_reasoning": "Paying based on 'sole discretion' means the company can legally refuse to pay you for completed work by simply claiming they are unsatisfied, leaving you with no clear legal right to payment.",
+      "suggested_redline": "Compensation shall be paid monthly within fifteen (15) days of invoice submission, subject to Company's reasonable acceptance of deliverables, which acceptance shall not be unreasonably withheld, conditioned, or delayed.",
+      "negotiation_tip": "Insist on objective criteria for accepting work. Replace 'sole discretion' with 'reasonable acceptance' and set a clear payment window (e.g., Net 15 or Net 30 days)."
+    },
+    {
+      "clause_id": "sec_termination_forfeiture",
+      "clause_title": "Termination and Payment Forfeiture",
+      "original_text": "Company reserves the absolute right to terminate this Agreement immediately at any time, with or without cause, and without prior notice. In the event of termination for any reason, Contractor shall immediately forfeit all unpaid fees and accrued compensation for all work performed up to the date of termination. Contractor shall have no right to seek remedy or outstanding payment.",
+      "plain_english": "The company can fire you at any second for any reason without warning. If they do, they do not have to pay you for any of the work you already did but haven't been paid for yet.",
+      "risk_level": "CRITICAL",
+      "risk_reasoning": "Forfeiting earned fees for work already performed is highly predatory and likely illegal wage/contract theft. It allows the company to benefit from your work and fire you right before payday to avoid paying.",
+      "suggested_redline": "Either party may terminate this Agreement upon fourteen (14) days' prior written notice. Upon termination, Company shall pay Contractor for all services performed and expenses incurred up to the effective date of termination.",
+      "negotiation_tip": "Never agree to forfeit unpaid fees for completed work. Demand a mutual notice period (e.g., 14 days) and explicit language ensuring payment for all work done up to the termination date."
+    },
+    {
+      "clause_id": "sec_ip_assignment",
+      "clause_title": "Intellectual Property Assignment",
+      "original_text": "Contractor hereby irrevocably assigns, transfers, and conveys to Company all right, title, and interest in and to any and all inventions, works of authorship, software, designs, ideas, trade secrets, and intellectual property created, conceived, developed, or reduced to practice by Contractor, whether alone or with others, during the term of this Agreement, regardless of whether created during working hours, using Company equipment, or during Contractor's personal off-hours at home entirely unrelated to Company's business.",
+      "plain_english": "The company owns everything you create while this contract is active. This includes projects you build at home, on your own time, using your own computer, even if it has nothing to do with the company's business.",
+      "risk_level": "CRITICAL",
+      "risk_reasoning": "This clause is an extreme overreach. It steals your personal intellectual property created outside of work hours, which could ruin your ability to run other projects, side businesses, or build personal portfolios.",
+      "suggested_redline": "Contractor hereby assigns to Company all right, title, and interest in intellectual property created solely in the performance of services under this Agreement, using Company resources, during working hours. Contractor retains all rights to intellectual property created outside the scope of services without the use of Company resources or confidential information.",
+      "negotiation_tip": "Limit the IP assignment strictly to work created 'in the scope of services' for this specific contract. Explicitly exclude personal projects, pre-existing IP, and off-hours work."
+    },
+    {
+      "clause_id": "sec_indemnification_liability",
+      "clause_title": "Indemnification and Liability",
+      "original_text": "Contractor agrees to indemnify, defend, and hold harmless Company, its officers, directors, employees, and affiliates from and against any and all claims, damages, liabilities, losses, judgments, costs, and expenses (including unlimited attorney's fees) arising out of or related to this Agreement or Contractor's services, regardless of Company's negligence. Company shall bear zero liability to Contractor under any legal theory, and Contractor's liability shall be completely uncapped.",
+      "plain_english": "You must pay for all of the company's legal fees and damages if something goes wrong, even if the mistake was entirely the company's fault. The company has zero liability to you, but your financial risk is unlimited.",
+      "risk_level": "CRITICAL",
+      "risk_reasoning": "This clause is completely one-sided. It forces you to pay for the company's own negligence, gives them a free pass for any wrongdoing, and leaves you with unlimited financial liability, which could bankrupt you.",
+      "suggested_redline": "Each party shall indemnify and hold harmless the other party from claims arising out of the indemnifying party's gross negligence or willful misconduct. In no event shall either party's total liability under this Agreement exceed the total fees paid to Contractor under this Agreement.",
+      "negotiation_tip": "Make the indemnification mutual, limit it to your gross negligence or willful misconduct (excluding the company's own negligence), and insist on a liability cap equal to the amount paid under the contract."
+    }
+  ],
+  "action_checklist": [
+    "Do not sign this agreement in its current form under any circumstances.",
+    "Request a complete rewrite of Section 2 (Termination) to guarantee payment for all completed work.",
+    "Request a rewrite of Section 3 (IP Assignment) to protect your personal, off-hours projects.",
+    "Request a mutual liability cap and remove the clause forcing you to cover the Company's negligence.",
+    "Establish objective acceptance criteria for deliverables to prevent discretionary non-payment."
+  ],
+  "attorney_prep_questions": [
+    "Is the payment forfeiture clause in Section 2 legally enforceable in my jurisdiction, and how can we best draft a demand for unpaid wages if they attempt to enforce it?",
+    "How can we draft an explicit 'Pre-Existing IP' exhibit to ensure my personal software tools and libraries are legally protected from their IP grab?",
+    "What is the standard liability cap for software development contractors in my state, and will my professional liability insurance cover me if the indemnification clause is not fully resolved?"
+  ]
+}
