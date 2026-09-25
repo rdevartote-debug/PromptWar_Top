@@ -143,7 +143,7 @@ In today's economy, individuals, freelancers, startup founders, consultants, and
 | **Icons** | **Lucide React** | Clean, accessible vector icons for legal status badges and actions. |
 | **Backend Framework** | **FastAPI (Python 3.10+)** | High-speed, asynchronous Python API with automatic OpenAPI docs. |
 | **ASGI Server** | **Uvicorn** | Fast, production-grade ASGI web server implementation. |
-| **AI / LLM Engine** | **Google GenAI SDK** | Gemini Flash models (`gemini-3.6-flash`, fallback to `gemini-3.7-flash`, `gemini-2.5-flash`). |
+| **AI / LLM Engine** | **Google GenAI SDK** | Gemini models (`gemini-3.5-flash-lite`, fallback to `gemini-3.6-flash`, `gemini-flash-latest`). |
 | **Schema Validation** | **Pydantic v2** | Enforces strict JSON schema guarantees on Gemini AI responses. |
 | **Document Parsers** | **pypdf & python-docx** | Robust binary text extraction from PDF and Word documents. |
 
@@ -303,6 +303,14 @@ npm run start
   - `file`: Document file (`.pdf`, `.docx`, `.txt`)
 - **Max File Size**: 10 MB
 - **Response**: `ContractAnalysisResult` (structured JSON)
+
+---
+
+### 3. Executive PDF Report Export
+- **Endpoint**: `POST /api/export-pdf`
+- **Content-Type**: `application/json`
+- **Payload**: `ContractAnalysisResult` JSON object
+- **Response**: `application/pdf` binary stream (`LegalDoc_Analysis_Report.pdf`)
 
 ---
 

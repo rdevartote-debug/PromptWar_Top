@@ -85,15 +85,22 @@ SYSTEM_INSTRUCTION = (
 )
 
 
+CANDIDATE_MODELS = [
+    "gemini-3.5-flash-lite",
+    "gemini-3.6-flash",
+    "gemini-flash-latest",
+]
+
+
 def analyze_contract_text(
     text: str,
     api_key: Optional[str] = None,
-    preferred_model: str = "gemini-3.6-flash"
+    preferred_model: str = "gemini-3.5-flash-lite"
 ) -> ContractAnalysisResult:
     """
     Analyzes a contract text string using Google GenAI SDK with structured Pydantic
     schema validation (ContractAnalysisResult) and deterministic temperature (0.1).
-    Includes automatic fallback across available Flash models and transient error retries.
+    Instant failover across available Flash models without blocking delays.
     """
     resolved_api_key = api_key or os.getenv("GEMINI_API_KEY")
     if not resolved_api_key:
@@ -111,39 +118,128 @@ def analyze_contract_text(
         system_instruction=SYSTEM_INSTRUCTION,
     )
 
-    candidate_models = [preferred_model]
-    for model_name in ["gemini-3.7-flash", "gemini-3.5-flash", "gemini-flash-latest", "gemini-2.5-flash"]:
-        if model_name not in candidate_models:
-            candidate_models.append(model_name)
+    candidate_models = list(CANDIDATE_MODELS)
+    if preferred_model and preferred_model not in candidate_models:
+        candidate_models.insert(0, preferred_model)
+    elif preferred_model and preferred_model != candidate_models[0]:
+        candidate_models.remove(preferred_model)
+        candidate_models.insert(0, preferred_model)
 
     last_error = None
 
     for model_name in candidate_models:
-        # Up to 2 attempts per model for transient errors
-        for attempt in range(2):
-            try:
-                response = client.models.generate_content(
-                    model=model_name,
-                    contents=text,
-                    config=config,
-                )
-                if not response.text:
-                    raise RuntimeError(f"Empty response received from Gemini API using '{model_name}'.")
-
+        try:
+            response = client.models.generate_content(
+                model=model_name,
+                contents=text,
+                config=config,
+            )
+            if response and response.text:
                 return ContractAnalysisResult.model_validate_json(response.text)
-
-            except APIError as err:
-                last_error = err
-                # If 404 (model unavailable) or 400 (bad request), skip to next candidate model
-                if getattr(err, "code", None) in [400, 404]:
-                    break
-                # If 503/429 (temporary overload or rate limit), wait briefly and retry or try next model
-                time.sleep(1.5 * (attempt + 1))
-            except Exception as err:
-                last_error = err
-                break
+            else:
+                last_error = RuntimeError(f"Empty response received from '{model_name}'.")
+        except Exception as err:
+            last_error = err
+            # Immediately try next candidate model without blocking sleep
+            continue
 
     raise RuntimeError(f"All candidate Gemini models failed to analyze the contract. Last error: {last_error}")
+
+
+# ==============================================================================
+# Negotiation Email & Chat Response Generator
+# ==============================================================================
+
+class NegotiationDraftRequest(BaseModel):
+    clause_title: str = Field(description="Title of the clause to negotiate")
+    original_text: str = Field(description="Original contract clause text")
+    suggested_redline: str = Field(description="Balanced counter-proposal redline text")
+    counterparty_name: Optional[str] = Field(default="Client / Landlord", description="Name of the counterparty who provided the contract")
+    user_role: Optional[str] = Field(default="Contractor / Tenant", description="Role of the user reviewing the contract")
+
+
+class NegotiationDraftResponse(BaseModel):
+    email_subject: str = Field(description="Professional email subject line")
+    email_diplomatic: str = Field(description="Polite, collaborative negotiation email proposing the redline")
+    email_firm: str = Field(description="Assertive, principled negotiation email proposing the redline")
+    chat_diplomatic: str = Field(description="Concise, polite message formatted for WhatsApp or Slack")
+    chat_firm: str = Field(description="Concise, direct message formatted for WhatsApp or Slack")
+
+
+NEGOTIATION_SYSTEM_INSTRUCTION = (
+    "You are an expert contract negotiation advisor. The user is currently negotiating a contract clause "
+    "with a counterparty. Your task is to draft professional, ready-to-send negotiation responses proposing "
+    "a balanced counter-proposal redline.\n\n"
+    "Crucial Guidelines:\n"
+    "1. The message is sent BY the user (Sender) TO the counterparty (Recipient).\n"
+    "2. email_subject: A concise, professional email subject line referencing the agreement and clause.\n"
+    "3. email_diplomatic: Polite, collaborative, partnership-oriented tone. Acknowledges the overall agreement, "
+    "kindly explains the specific issue with the original clause, proposes the exact redline wording, and expresses enthusiasm for working together.\n"
+    "4. email_firm: Assertive, principled, and clear. States that the clause presents an unacceptable legal or commercial risk, "
+    "clearly proposes the redline wording, and explains that agreement on this point is required before signing.\n"
+    "5. chat_diplomatic: Optimized for WhatsApp, Slack, or SMS. Short, friendly, polite, quoting the proposed edit.\n"
+    "6. chat_firm: Optimized for WhatsApp, Slack, or SMS. Direct, professional, concise, clearly requesting the adjustment."
+)
+
+
+def generate_negotiation_draft(
+    req: NegotiationDraftRequest,
+    api_key: Optional[str] = None,
+    preferred_model: str = "gemini-3.5-flash-lite",
+) -> NegotiationDraftResponse:
+    """
+    Generates tailored email and WhatsApp/Slack negotiation drafts in both
+    'Diplomatic' and 'Firm' tones using Google GenAI SDK.
+    """
+    resolved_api_key = api_key or os.getenv("GEMINI_API_KEY")
+    if not resolved_api_key:
+        raise ValueError(
+            "GEMINI_API_KEY is not set. Please set the GEMINI_API_KEY environment variable "
+            "or provide a .env file."
+        )
+
+    client = genai.Client(api_key=resolved_api_key)
+
+    config = types.GenerateContentConfig(
+        temperature=0.2,
+        response_mime_type="application/json",
+        response_schema=NegotiationDraftResponse,
+        system_instruction=NEGOTIATION_SYSTEM_INSTRUCTION,
+    )
+
+    candidate_models = list(CANDIDATE_MODELS)
+    if preferred_model and preferred_model not in candidate_models:
+        candidate_models.insert(0, preferred_model)
+    elif preferred_model and preferred_model != candidate_models[0]:
+        candidate_models.remove(preferred_model)
+        candidate_models.insert(0, preferred_model)
+
+    prompt = (
+        f"Clause Title: {req.clause_title}\n"
+        f"Original Clause Text: \"{req.original_text}\"\n"
+        f"Proposed Balanced Redline: \"{req.suggested_redline}\"\n"
+        f"Recipient / Counterparty: {req.counterparty_name or 'Client / Landlord'}\n"
+        f"Sender / User Role: {req.user_role or 'Contractor / Tenant'}\n\n"
+        "Generate the email_subject, email_diplomatic, email_firm, chat_diplomatic, and chat_firm drafts."
+    )
+
+    last_error = None
+    for model_name in candidate_models:
+        try:
+            response = client.models.generate_content(
+                model=model_name,
+                contents=prompt,
+                config=config,
+            )
+            if response and response.text:
+                return NegotiationDraftResponse.model_validate_json(response.text)
+            else:
+                last_error = RuntimeError(f"Empty response received from '{model_name}'.")
+        except Exception as err:
+            last_error = err
+            continue
+
+    raise RuntimeError(f"Failed to generate negotiation draft. Last error: {last_error}")
 
 
 # ==============================================================================

@@ -6,3 +6,4 @@ uvicorn[standard]
 python-multipart
 pypdf
 python-docx
+reportlab

@@ -1,13 +1,22 @@
 import io
 import os
+import asyncio
 from pathlib import Path
 from fastapi import FastAPI, File, UploadFile, HTTPException, status
+from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 import pypdf
 import docx
 from dotenv import load_dotenv
 
-from analyze_contract import analyze_contract_text, ContractAnalysisResult
+from analyze_contract import (
+    analyze_contract_text,
+    ContractAnalysisResult,
+    NegotiationDraftRequest,
+    NegotiationDraftResponse,
+    generate_negotiation_draft,
+)
+from generate_report import generate_report_pdf
 
 # Load environment variables
 load_dotenv()
@@ -152,12 +161,56 @@ async def analyze_contract(file: UploadFile = File(...)):
         )
 
     try:
-        result = analyze_contract_text(extracted_text)
+        result = await asyncio.to_thread(analyze_contract_text, extracted_text)
         return result
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"AI Contract Analysis failed: {str(e)}",
+        )
+
+
+@app.post("/api/export-pdf")
+async def export_pdf_report(analysis: ContractAnalysisResult):
+    """
+    Generates an executive, styled PDF report of the contract risk analysis.
+    """
+    try:
+        pdf_buffer = await asyncio.to_thread(generate_report_pdf, analysis)
+        doc_slug = "Contract"
+        if analysis.document_title:
+            doc_slug = "".join(c for c in analysis.document_title if c.isalnum() or c in (" ", "_", "-")).strip()
+            doc_slug = doc_slug.replace(" ", "_")[:30] or "Contract"
+        filename = f"LegalDoc_{doc_slug}_Report.pdf"
+
+        return StreamingResponse(
+            pdf_buffer,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Access-Control-Expose-Headers": "Content-Disposition",
+            },
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate PDF report: {str(e)}",
+        )
+
+
+@app.post("/api/negotiate-draft", response_model=NegotiationDraftResponse)
+async def draft_negotiation_message(req: NegotiationDraftRequest):
+    """
+    Generates ready-to-send negotiation email and WhatsApp/Slack drafts
+    (in both 'Diplomatic' and 'Firm' tones) proposing a balanced counter-proposal redline.
+    """
+    try:
+        response = await asyncio.to_thread(generate_negotiation_draft, req)
+        return response
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate negotiation draft: {str(e)}",
         )
 
 
