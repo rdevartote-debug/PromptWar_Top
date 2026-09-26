@@ -190,6 +190,9 @@ export const ActionSidebar: React.FC<ActionSidebarProps> = ({
           </div>
           <button
             onClick={() => setIsAttorneyBriefOpen(!isAttorneyBriefOpen)}
+            aria-expanded={isAttorneyBriefOpen}
+            aria-controls="attorney-prep-content"
+            aria-label={isAttorneyBriefOpen ? "Collapse attorney prep brief" : "Expand attorney prep brief"}
             className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white transition"
           >
             {isAttorneyBriefOpen ? (
@@ -201,7 +204,7 @@ export const ActionSidebar: React.FC<ActionSidebarProps> = ({
         </div>
 
         {isAttorneyBriefOpen && (
-          <div className="mt-4 space-y-4">
+          <div id="attorney-prep-content" className="mt-4 space-y-4">
             <p className="text-xs text-slate-400 leading-relaxed">
               Take these exact questions to your legal consultation to get precise advice quickly:
             </p>

@@ -17,8 +17,13 @@ import {
   FileDiff,
 } from 'lucide-react';
 import { ClauseAnalysis, RiskLevel } from '@/types/contract';
-import { NegotiationDraftModal } from './NegotiationDraftModal';
+import dynamic from 'next/dynamic';
 import { computeWordDiff } from '@/lib/diff';
+
+const NegotiationDraftModal = dynamic(
+  () => import('./NegotiationDraftModal').then((mod) => mod.NegotiationDraftModal),
+  { ssr: false }
+);
 
 interface ClauseCardProps {
   clause: ClauseAnalysis;
@@ -91,7 +96,11 @@ export const ClauseCard: React.FC<ClauseCardProps> = ({
   const BadgeIcon = badge.icon;
 
   return (
-    <div className="group relative overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80 p-6 backdrop-blur-md transition-all duration-200 hover:border-slate-700/90 shadow-xl shadow-black/20">
+    <article
+      tabIndex={0}
+      aria-labelledby={`clause-title-${clause.clause_id}`}
+      className="group relative overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80 p-6 backdrop-blur-md transition-all duration-200 hover:border-slate-700/90 shadow-xl shadow-black/20 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+    >
       {/* Top Header: Title, ID & Risk Badge */}
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-800 pb-4">
         <div className="space-y-1 max-w-lg">
@@ -101,7 +110,7 @@ export const ClauseCard: React.FC<ClauseCardProps> = ({
             </span>
             <span className="font-mono text-xs text-slate-500">{clause.clause_id}</span>
           </div>
-          <h3 className="text-lg font-bold text-white tracking-tight">
+          <h3 id={`clause-title-${clause.clause_id}`} className="text-lg font-bold text-white tracking-tight">
             {clause.clause_title}
           </h3>
         </div>
@@ -129,7 +138,7 @@ export const ClauseCard: React.FC<ClauseCardProps> = ({
               }`}
             >
               <Sparkles className="h-3.5 w-3.5" />
-              Plain-English (8th Grade)
+              Plain Explanation (8th Grade)
             </button>
             <button
               onClick={() => setActiveTab('diff')}
@@ -319,7 +328,7 @@ export const ClauseCard: React.FC<ClauseCardProps> = ({
               </div>
               <div className="rounded-xl border border-indigo-500/20 bg-indigo-950/20 p-3.5">
                 <div className="text-[11px] font-bold uppercase tracking-wider text-indigo-400 mb-1">
-                  Plain-English Translation
+                  Plain Language Explanation
                 </div>
                 <p className="text-xs font-medium leading-relaxed text-slate-200">
                   {clause.plain_english}
@@ -411,7 +420,7 @@ export const ClauseCard: React.FC<ClauseCardProps> = ({
         defaultCounterparty={counterpartyName}
         defaultUserRole={userRole}
       />
-    </div>
+    </article>
   );
 };
 

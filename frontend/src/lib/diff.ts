@@ -17,7 +17,7 @@ export function computeWordDiff(
   oldText: string,
   newText: string
 ): { chunks: DiffChunk[]; stats: DiffStats } {
-  const tokenize = (s: string) => s.match(/[\w'-]+|[^\w\s]+|\s+/g) || [];
+  const tokenize = (s: string) => s.match(/[\p{L}\p{M}\p{N}'-]+|[^\p{L}\p{M}\p{N}\s]+|\s+/gu) || [];
   const oldTokens = tokenize(oldText || '');
   const newTokens = tokenize(newText || '');
   const m = oldTokens.length;
@@ -69,7 +69,7 @@ export function computeWordDiff(
   let commonCount = 0;
 
   for (const chunk of merged) {
-    const words = (chunk.value.match(/[\w'-]+/g) || []).length;
+    const words = (chunk.value.match(/[\p{L}\p{M}\p{N}'-]+/gu) || []).length;
     if (chunk.type === 'removed') removedCount += words;
     else if (chunk.type === 'added') addedCount += words;
     else commonCount += words;

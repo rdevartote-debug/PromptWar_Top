@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
+import dynamic from 'next/dynamic';
 import initialMockData from '@/data/mockData.json';
 import { ContractAnalysisResult, RiskLevel } from '@/types/contract';
 import { analyzeContract } from '@/lib/api';
@@ -11,7 +12,12 @@ import { ActionSidebar } from '@/components/ActionSidebar';
 import { FileUploadZone } from '@/components/FileUploadZone';
 import { AnalysisLoader } from '@/components/AnalysisLoader';
 import { LegalDisclaimerBanner } from '@/components/LegalDisclaimerBanner';
-import { ScenarioSimulator } from '@/components/ScenarioSimulator';
+
+// Lazy-load heavy ScenarioSimulator component
+const ScenarioSimulator = dynamic(
+  () => import('@/components/ScenarioSimulator').then((mod) => mod.ScenarioSimulator),
+  { ssr: false }
+);
 
 import {
   Filter,
@@ -34,15 +40,15 @@ export default function DashboardPage() {
   const [selectedFilter, setSelectedFilter] = useState<'ALL' | RiskLevel>('ALL');
 
   // Load sample predatory contract immediately
-  const handleLoadSample = () => {
+  const handleLoadSample = useCallback(() => {
     setErrorMessage(null);
     setAnalysisMode('sample');
     setContractData(initialMockData as ContractAnalysisResult);
     setCurrentFileName('Sample_Predatory_Contract.txt');
-  };
+  }, []);
 
   // Upload and analyze real document with FastAPI + Gemini
-  const handleFileSelect = async (file: File) => {
+  const handleFileSelect = useCallback(async (file: File) => {
     setIsLoading(true);
     setCurrentFileName(file.name);
     setErrorMessage(null);
@@ -57,14 +63,14 @@ export default function DashboardPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   // Return to upload screen
-  const handleNewScan = () => {
+  const handleNewScan = useCallback(() => {
     setContractData(null);
     setErrorMessage(null);
     setCurrentFileName('');
-  };
+  }, []);
 
   // Clause count breakdown
   const counts = useMemo(() => {
@@ -96,7 +102,7 @@ export default function DashboardPage() {
       />
 
       {/* Main Content Area */}
-      <main className="flex-1 mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8 flex flex-col justify-center">
+      <main id="main-content" className="flex-1 mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8 flex flex-col justify-center">
         {/* State 1: Active Loading Stage */}
         {isLoading && (
           <div className="py-12">
@@ -106,14 +112,14 @@ export default function DashboardPage() {
 
         {/* State 2: No Contract Loaded (Upload Prompt) */}
         {!isLoading && !contractData && (
-          <div className="space-y-8 py-6">
+          <section aria-labelledby="hero-title" className="space-y-8 py-6">
             {/* Hero text */}
             <div className="text-center space-y-3 max-w-2xl mx-auto">
               <div className="inline-flex items-center gap-2 rounded-full border border-indigo-500/30 bg-indigo-500/10 px-3 py-1 text-xs font-semibold text-indigo-300">
                 <Scale className="h-3.5 w-3.5 text-indigo-400" />
                 <span>AI-Powered Legal Risk Engine</span>
               </div>
-              <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-white">
+              <h2 id="hero-title" className="text-3xl sm:text-4xl font-extrabold tracking-tight text-white">
                 Analyze Any Contract in Seconds
               </h2>
               <p className="text-sm sm:text-base text-slate-400 leading-relaxed">
@@ -128,12 +134,12 @@ export default function DashboardPage() {
               isLoading={isLoading}
               errorMessage={errorMessage}
             />
-          </div>
+          </section>
         )}
 
         {/* State 3: Contract Results Loaded */}
         {!isLoading && contractData && (
-          <div className="space-y-6">
+          <section aria-label="Contract Analysis Dashboard" className="space-y-6">
             {/* Mode switch banner if viewing sample */}
             {analysisMode === 'sample' && (
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-indigo-500/30 bg-indigo-950/30 p-4 backdrop-blur-md">
@@ -152,6 +158,7 @@ export default function DashboardPage() {
                 </div>
                 <button
                   onClick={handleNewScan}
+                  aria-label="Upload your own contract document"
                   className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 px-3.5 py-1.5 text-xs font-bold text-white transition shadow-sm"
                 >
                   <UploadCloud className="h-3.5 w-3.5" />
@@ -171,6 +178,7 @@ export default function DashboardPage() {
                   riskSummary={contractData.risk_summary}
                   totalClauses={counts.total}
                   criticalCount={counts.critical}
+                  detectedLanguage={contractData.detected_language}
                 />
 
                 {/* 2. Feature 3: The "What If?" Scenario Simulator */}
@@ -178,7 +186,6 @@ export default function DashboardPage() {
 
                 {/* 3. Clause Severity Filter Bar */}
                 <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-900/70 p-3 backdrop-blur-md">
-
                   <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-400 pl-1">
                     <Filter className="h-4 w-4 text-indigo-400" />
                     <span>Filter Clauses by Severity</span>
@@ -188,6 +195,7 @@ export default function DashboardPage() {
                     {/* ALL */}
                     <button
                       onClick={() => setSelectedFilter('ALL')}
+                      aria-label={`Show all ${counts.total} clauses`}
                       className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
                         selectedFilter === 'ALL'
                           ? 'bg-indigo-600 text-white shadow-sm'
@@ -201,6 +209,7 @@ export default function DashboardPage() {
                     {/* CRITICAL */}
                     <button
                       onClick={() => setSelectedFilter('CRITICAL')}
+                      aria-label={`Show ${counts.critical} critical risk clauses`}
                       className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
                         selectedFilter === 'CRITICAL'
                           ? 'bg-rose-600 text-white shadow-sm'
@@ -214,6 +223,7 @@ export default function DashboardPage() {
                     {/* HIGH */}
                     <button
                       onClick={() => setSelectedFilter('HIGH')}
+                      aria-label={`Show ${counts.high} high risk clauses`}
                       className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
                         selectedFilter === 'HIGH'
                           ? 'bg-amber-600 text-white shadow-sm'
@@ -227,6 +237,7 @@ export default function DashboardPage() {
                     {/* MEDIUM */}
                     <button
                       onClick={() => setSelectedFilter('MEDIUM')}
+                      aria-label={`Show ${counts.medium} medium risk clauses`}
                       className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
                         selectedFilter === 'MEDIUM'
                           ? 'bg-yellow-600 text-white shadow-sm'
@@ -240,6 +251,7 @@ export default function DashboardPage() {
                     {/* LOW */}
                     <button
                       onClick={() => setSelectedFilter('LOW')}
+                      aria-label={`Show ${counts.low} low risk clauses`}
                       className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
                         selectedFilter === 'LOW'
                           ? 'bg-emerald-600 text-white shadow-sm'
@@ -253,7 +265,7 @@ export default function DashboardPage() {
                 </div>
 
                 {/* 3. Clause Analysis Cards List */}
-                <div className="flex flex-col gap-5">
+                <section aria-label="Detailed Clause Cards List" className="flex flex-col gap-5">
                   {filteredClauses.length > 0 ? (
                     filteredClauses.map((clause, idx) => (
                       <ClauseCard
@@ -265,7 +277,6 @@ export default function DashboardPage() {
                       />
                     ))
                   ) : (
-
                     <div className="rounded-2xl border border-dashed border-slate-800 bg-slate-900/40 p-8 text-center">
                       <p className="text-sm font-medium text-slate-400">
                         No clauses found matching the selected risk filter ({selectedFilter}).
@@ -278,24 +289,26 @@ export default function DashboardPage() {
                       </button>
                     </div>
                   )}
-                </div>
+                </section>
               </div>
 
               {/* Right Column (35% width -> 4 cols of 12) */}
-              <div className="lg:col-span-4 lg:sticky lg:top-20">
+              <aside aria-label="Action Checklist and Attorney Brief" className="lg:col-span-4 lg:sticky lg:top-20">
                 <ActionSidebar
                   actionChecklist={contractData.action_checklist}
                   attorneyQuestions={contractData.attorney_prep_questions}
                   contractData={contractData}
                 />
-              </div>
+              </aside>
             </div>
-          </div>
+          </section>
         )}
       </main>
 
       {/* Footer Legal Disclaimer Banner */}
-      <LegalDisclaimerBanner />
+      <footer aria-label="Legal Notice">
+        <LegalDisclaimerBanner />
+      </footer>
     </div>
   );
 }

@@ -157,7 +157,10 @@ Recommended Action: ${currentResult.recommended_action}`;
   };
 
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/85 p-6 backdrop-blur-xl shadow-xl shadow-black/25 space-y-6">
+    <section
+      aria-labelledby="scenario-simulator-title"
+      className="relative overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/85 p-6 backdrop-blur-xl shadow-xl shadow-black/25 space-y-6"
+    >
       {/* Decorative Glow */}
       <div className="absolute -right-24 -top-24 h-64 w-64 rounded-full bg-indigo-500/10 blur-3xl pointer-events-none" />
 
@@ -169,7 +172,7 @@ Recommended Action: ${currentResult.recommended_action}`;
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h3 className="text-lg font-bold text-white tracking-tight">
+              <h3 id="scenario-simulator-title" className="text-lg font-bold text-white tracking-tight">
                 The &ldquo;What If?&rdquo; Scenario Simulator
               </h3>
               <span className="rounded-full bg-cyan-500/10 border border-cyan-500/30 px-2.5 py-0.5 text-[10px] font-bold text-cyan-300 uppercase tracking-wider">
@@ -226,12 +229,14 @@ Recommended Action: ${currentResult.recommended_action}`;
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Ask any scenario: e.g. What happens if I miss a deliverable milestone by 5 days?"
+            aria-label="Hypothetical scenario question"
             className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-2.5 text-xs sm:text-sm text-slate-100 placeholder-slate-500 focus:border-indigo-500 focus:outline-none pr-10 shadow-inner"
             disabled={isLoading}
           />
         </div>
         <button
           type="submit"
+          aria-label="Simulate scenario"
           disabled={isLoading || !query.trim()}
           className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-cyan-600 hover:from-indigo-500 hover:to-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed px-5 py-2.5 text-xs sm:text-sm font-bold text-white shadow-lg shadow-indigo-500/20 transition-all shrink-0"
         >
@@ -260,6 +265,9 @@ Recommended Action: ${currentResult.recommended_action}`;
       {/* Active Simulation Result Card */}
       {currentResult && (
         <div
+          role="region"
+          aria-live="polite"
+          aria-label="Scenario Simulation Result"
           className={`rounded-2xl border ${getVerdictConfig(currentResult.verdict_badge).cardBorder} ${getVerdictConfig(currentResult.verdict_badge).cardBg} p-5 space-y-4 transition-all duration-300`}
         >
           {/* Verdict Banner Header */}
@@ -331,6 +339,7 @@ Recommended Action: ${currentResult.recommended_action}`;
           <div className="flex justify-end pt-1">
             <button
               onClick={handleCopyResult}
+              aria-label="Copy simulation brief to clipboard"
               className="inline-flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:bg-slate-700 hover:text-white transition shadow-sm"
             >
               {copied ? (
@@ -374,6 +383,6 @@ Recommended Action: ${currentResult.recommended_action}`;
           </div>
         </div>
       )}
-    </div>
+    </section>
   );
 };

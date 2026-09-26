@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { AlertTriangle, ShieldAlert, ShieldCheck, Users, FileText } from 'lucide-react';
+import { AlertTriangle, ShieldAlert, ShieldCheck, Users, FileText, Globe } from 'lucide-react';
 
 interface RiskMeterProps {
   score: number;
@@ -10,6 +10,7 @@ interface RiskMeterProps {
   riskSummary: string;
   totalClauses: number;
   criticalCount: number;
+  detectedLanguage?: string;
 }
 
 export const RiskMeter: React.FC<RiskMeterProps> = ({
@@ -19,6 +20,7 @@ export const RiskMeter: React.FC<RiskMeterProps> = ({
   riskSummary,
   totalClauses,
   criticalCount,
+  detectedLanguage,
 }) => {
   // Color configuration based on score
   const getRiskDetails = (scoreValue: number) => {
@@ -74,6 +76,12 @@ export const RiskMeter: React.FC<RiskMeterProps> = ({
             <div className="flex items-center gap-2 text-xs font-semibold tracking-wider text-slate-400 uppercase">
               <FileText className="h-4 w-4 text-indigo-400" />
               <span>Contract Evaluation</span>
+              {detectedLanguage && (
+                <span className="ml-2 inline-flex items-center gap-1 rounded-full border border-indigo-500/30 bg-indigo-500/10 px-2 py-0.5 text-[11px] font-semibold text-indigo-300 normal-case tracking-normal">
+                  <Globe className="h-3 w-3 text-indigo-400" />
+                  <span>{detectedLanguage}</span>
+                </span>
+              )}
             </div>
             <h2 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
               {documentTitle}

@@ -48,8 +48,12 @@ class ClauseAnalysis(BaseModel):
 
 
 class ContractAnalysisResult(BaseModel):
+    detected_language: str = Field(
+        default="English",
+        description="Auto-detected primary language of the uploaded document (e.g., 'English', 'Marathi', 'Hindi', 'Spanish')"
+    )
     document_title: str = Field(
-        description="Title or inferred type of the agreement"
+        description="Title or inferred type of the agreement in the detected document language"
     )
     parties_involved: List[str] = Field(
         description="Names or roles of all parties identified in the contract"
@@ -60,16 +64,16 @@ class ContractAnalysisResult(BaseModel):
         description="Overall risk score from 0 (very safe) to 100 (extremely high risk/predatory)"
     )
     risk_summary: str = Field(
-        description="Executive summary of the primary contract risks in 2-3 concise sentences"
+        description="Executive summary of the primary contract risks in 2-3 concise sentences in the detected document language"
     )
     clauses: List[ClauseAnalysis] = Field(
         description="Detailed breakdown and risk analysis of all evaluated clauses"
     )
     action_checklist: List[str] = Field(
-        description="Concrete, prioritized action checklist the user should complete before signing"
+        description="Concrete, prioritized action checklist in the detected document language"
     )
     attorney_prep_questions: List[str] = Field(
-        description="Specific, strategic questions to ask legal counsel regarding high-risk terms"
+        description="Specific, strategic questions in the detected document language to ask legal counsel regarding high-risk terms"
     )
 
 
@@ -79,8 +83,14 @@ class ContractAnalysisResult(BaseModel):
 
 SYSTEM_INSTRUCTION = (
     "You are an objective legal translator and risk analyzer. Your role is to analyze legal contracts, "
-    "translate complex legalese into clear plain English (aimed at an 8th-grade reading level), detect unfair, "
-    "one-sided, or overly restrictive terms, and generate balanced, practical redline counter-proposals.\n\n"
+    "translate complex legalese into clear, plain language (aimed at an 8th-grade reading level in the document's native language), "
+    "detect unfair, one-sided, or overly restrictive terms, and generate balanced, practical redline counter-proposals.\n\n"
+    "CRITICAL LANGUAGE INSTRUCTION:\n"
+    "1. Auto-detect the primary language of the uploaded document (e.g., English, Marathi, Hindi, Spanish). Set the 'detected_language' field to this value.\n"
+    "2. You MUST output ALL plain-text fields in this detected language.\n"
+    "3. This includes the `risk_summary` (overall summary), `plain_english` (plain explanation), `clause_title`, `risk_reasoning`, `suggested_redline`, `negotiation_tip`, and all `action_checklist` and `attorney_prep_questions` items. "
+    "If the document is in Marathi, explain the risks, summaries, tips, redlines, and checklist in fluent, professional Marathi. If Hindi, use Hindi. If Spanish, use Spanish. If English, use English.\n"
+    "4. Retain the exact original `original_text` as it appears in the document for accurate citation.\n\n"
     "Explicit Disclaimer: Your analysis is provided strictly for informational and educational guidance "
     "and does not constitute formal legal advice or create an attorney-client relationship."
 )
@@ -100,11 +110,21 @@ def generate_fallback_analysis(text: str, reason: str = "") -> ContractAnalysisR
     Deterministic rule-based fallback analyzer that scans contract text for
     standard clauses, evaluates risk levels, and generates structured analysis
     when remote Gemini API models are temporarily unavailable (e.g. 503 high demand).
+    Preserves Native Language In, Native Language Out processing.
     """
+    # Detect language: check for Devanagari script (Marathi / Hindi)
+    has_devanagari = bool(re.search(r"[\u0900-\u097F]", text))
+    if has_devanagari:
+        marathi_markers = ["आहे", "नाही", "करार", "भाडेकरार", "पक्षकार", "रुपये", "दिनांक", "महिना", "स्वाक्षरी", "भाडेकरू", "मालक"]
+        is_marathi = any(w in text for w in marathi_markers)
+        detected_lang = "Marathi" if is_marathi else "Hindi"
+    else:
+        detected_lang = "English"
+
     lines = [line.strip() for line in text.splitlines() if line.strip()]
-    doc_title = "Commercial Agreement"
+    doc_title = "Commercial Agreement" if detected_lang == "English" else ("व्यावसायिक करारनामा" if detected_lang == "Marathi" else "व्यावसायिक अनुबंध")
     for line in lines[:8]:
-        if any(keyword in line.upper() for keyword in ["AGREEMENT", "CONTRACT", "TERMS", "POLICY", "NDA", "MEMORANDUM"]):
+        if any(keyword in line.upper() for keyword in ["AGREEMENT", "CONTRACT", "TERMS", "POLICY", "NDA", "MEMORANDUM", "करार", "भाडेकरार", "अनुबंध"]):
             doc_title = line.strip("#=*- ")[:80]
             break
 
@@ -118,14 +138,22 @@ def generate_fallback_analysis(text: str, reason: str = "") -> ContractAnalysisR
         if p1 and p2:
             parties = [p1, p2]
     if not parties:
-        if "company" in text_lower and "contractor" in text_lower:
-            parties = ["Company", "Contractor"]
-        elif "landlord" in text_lower and "tenant" in text_lower:
-            parties = ["Landlord", "Tenant"]
-        elif "disclosing party" in text_lower or "receiving party" in text_lower:
-            parties = ["Disclosing Party", "Receiving Party"]
+        if detected_lang == "Marathi":
+            if "मालक" in text or "भाडेकरू" in text:
+                parties = ["घरमालक / जागा मालक", "भाडेकरू"]
+            else:
+                parties = ["प्रथम पक्षकार", "द्वितीय पक्षकार"]
+        elif detected_lang == "Hindi":
+            parties = ["प्रथम पक्ष", "द्वितीय पक्ष"]
         else:
-            parties = ["Party A", "Party B"]
+            if "company" in text_lower and "contractor" in text_lower:
+                parties = ["Company", "Contractor"]
+            elif "landlord" in text_lower and "tenant" in text_lower:
+                parties = ["Landlord", "Tenant"]
+            elif "disclosing party" in text_lower or "receiving party" in text_lower:
+                parties = ["Disclosing Party", "Receiving Party"]
+            else:
+                parties = ["Party A", "Party B"]
 
     clauses: List[ClauseAnalysis] = []
     paragraphs = [p.strip() for p in text.split("\n\n") if len(p.strip()) > 30]
@@ -140,95 +168,141 @@ def generate_fallback_analysis(text: str, reason: str = "") -> ContractAnalysisR
         return None
 
     # 1. Termination clause
-    term_para = find_best_para(["terminat", "forfeit", "cancellation", "without notice"])
+    term_para = find_best_para(["terminat", "forfeit", "cancellation", "without notice", "रद्द", "समाप्ती", "मुदतपूर्व"])
     if term_para:
         p_low = term_para.lower()
-        is_crit = "forfeit" in p_low or "without notice" in p_low or "immediate" in p_low
-        clauses.append(ClauseAnalysis(
-            clause_id="sec_termination",
-            clause_title="Termination and Notice Requirements",
-            original_text=term_para[:500],
-            plain_english="The other party can terminate this agreement quickly or immediately, and you risk losing compensation for completed work without adequate notice.",
-            risk_level="CRITICAL" if is_crit else "HIGH",
-            risk_reasoning="Immediate termination without cure periods or payment forfeiture leaves you commercially vulnerable with zero revenue security.",
-            suggested_redline="Either party may terminate this Agreement upon thirty (30) days prior written notice. Upon termination, Contractor shall be promptly compensated for all services performed up to the termination date.",
-            negotiation_tip="Insist on a 14-30 day written notice period and strict protection ensuring accrued fees are non-forfeitable.",
-        ))
+        is_crit = "forfeit" in p_low or "without notice" in p_low or "immediate" in p_low or "जप्त" in p_low or "पूर्वसूचना न देता" in p_low
+        if detected_lang == "Marathi":
+            clauses.append(ClauseAnalysis(
+                clause_id="sec_termination",
+                clause_title="करार समाप्ती आणि पूर्वसूचनेची अट",
+                original_text=term_para[:500],
+                plain_english="दुसरा पक्ष हा करार तातडीने किंवा कमी नोटीस देऊन संपुष्टात आणू शकतो, आणि योग्य सूचनेशिवाय केलेल्या कामाचे पैसे न मिळण्याची जोखीम आहे.",
+                risk_level="CRITICAL" if is_crit else "HIGH",
+                risk_reasoning="पूर्वसूचनेचा कालावधी न ठेवता त्वरित करार रद्द करणे किंवा देय रक्कम जप्त करणे हे एकांगी आणि गंभीर आर्थिक नुकसान करणारे आहे.",
+                suggested_redline="कोणत्याही पक्षाला हा करार संपुष्टात आणण्यापूर्वी किमान ३० दिवसांची लेखी पूर्वसूचना देणे बंधनकारक राहील. करार संपण्याच्या तारखेपर्यंत केलेल्या सर्व कामांचे देयक देणे अनिवार्य असेल.",
+                negotiation_tip="किमान १४ ते ३० दिवसांच्या लेखी पूर्वसूचनेचा आग्रह धरा आणि थकबाकी न जप्त करण्याची हमी घ्या.",
+            ))
+        else:
+            clauses.append(ClauseAnalysis(
+                clause_id="sec_termination",
+                clause_title="Termination and Notice Requirements",
+                original_text=term_para[:500],
+                plain_english="The other party can terminate this agreement quickly or immediately, and you risk losing compensation for completed work without adequate notice.",
+                risk_level="CRITICAL" if is_crit else "HIGH",
+                risk_reasoning="Immediate termination without cure periods or payment forfeiture leaves you commercially vulnerable with zero revenue security.",
+                suggested_redline="Either party may terminate this Agreement upon thirty (30) days prior written notice. Upon termination, Contractor shall be promptly compensated for all services performed up to the termination date.",
+                negotiation_tip="Insist on a 14-30 day written notice period and strict protection ensuring accrued fees are non-forfeitable.",
+            ))
 
-    # 2. IP Assignment
-    ip_para = find_best_para(["intellectual property", "inventions", "work product", "all right, title", "off-hours", "moral rights"])
+    # 2. IP Assignment / Property Rights
+    ip_para = find_best_para(["intellectual property", "inventions", "work product", "all right, title", "off-hours", "moral rights", "मालकी हक्क", "बौद्धिक संपदा"])
     if ip_para:
         p_low = ip_para.lower()
         is_crit = "off-hours" in p_low or "personal" in p_low or "entirely unrelated" in p_low or "alone or with others" in p_low
-        clauses.append(ClauseAnalysis(
-            clause_id="sec_ip_assignment",
-            clause_title="Intellectual Property and Inventions Assignment",
-            original_text=ip_para[:500],
-            plain_english="The company claims total ownership over all intellectual property and inventions, potentially extending to work created outside of company hours or on personal devices.",
-            risk_level="CRITICAL" if is_crit else "HIGH",
-            risk_reasoning="Broad IP assignment clauses that capture off-hours or unrelated personal projects infringe upon your pre-existing portfolio and future independent work.",
-            suggested_redline="Contractor assigns ownership only in deliverables specifically created for and paid by Company under this Agreement. Contractor retains all rights to pre-existing IP and personal works created on personal time.",
-            negotiation_tip="Carve out pre-existing intellectual property and limit assignments strictly to deliverables paid for by the client.",
-        ))
+        if detected_lang == "Marathi":
+            clauses.append(ClauseAnalysis(
+                clause_id="sec_ip_assignment",
+                clause_title="बौद्धिक संपदा आणि मालकी हक्क",
+                original_text=ip_para[:500],
+                plain_english="कंपनी सर्व निर्मिती आणि बौद्धिक संपदेवर संपूर्ण मालकी सांगते, ज्यामध्ये वैयक्तिक वेळेत किंवा स्वतंत्रपणे केलेल्या कामाचाही समावेश होऊ शकतो.",
+                risk_level="CRITICAL" if is_crit else "HIGH",
+                risk_reasoning="कामाच्या तासांनंतरच्या किंवा स्वतंत्र वैयक्तिक प्रकल्पांवर मालकी हक्क मागणे अन्यायकारक असून यामुळे तुमच्या भविष्यातील कामावर गदा येते.",
+                suggested_redline="केवळ या कराराखाली आणि मोबदला देऊन तयार केलेल्या कामांवरच क्लायंटचा हक्क राहील. कंत्राटदाराच्या वैयक्तिक वेळेत केलेल्या स्वतंत्र कामावर कंत्राटदाराचाच पूर्ण हक्क राहील.",
+                negotiation_tip="पूर्वीचे प्रकल्प आणि वैयक्तिक वेळात केलेल्या निर्मितीला या अटीतून स्पष्टपणे वगळा.",
+            ))
+        else:
+            clauses.append(ClauseAnalysis(
+                clause_id="sec_ip_assignment",
+                clause_title="Intellectual Property and Inventions Assignment",
+                original_text=ip_para[:500],
+                plain_english="The company claims total ownership over all intellectual property and inventions, potentially extending to work created outside of company hours or on personal devices.",
+                risk_level="CRITICAL" if is_crit else "HIGH",
+                risk_reasoning="Broad IP assignment clauses that capture off-hours or unrelated personal projects infringe upon your pre-existing portfolio and future independent work.",
+                suggested_redline="Contractor assigns ownership only in deliverables specifically created for and paid by Company under this Agreement. Contractor retains all rights to pre-existing IP and personal works created on personal time.",
+                negotiation_tip="Carve out pre-existing intellectual property and limit assignments strictly to deliverables paid for by the client.",
+            ))
 
     # 3. Indemnification & Liability
-    indem_para = find_best_para(["indemnif", "hold harmless", "liability", "damages", "attorney's fees"])
+    indem_para = find_best_para(["indemnif", "hold harmless", "liability", "damages", "attorney's fees", "नुकसान भरपाई", "जबाबदारी", "दायित्व"])
     if indem_para:
         p_low = indem_para.lower()
-        is_crit = "uncapped" in p_low or "zero liability" in p_low or "regardless of" in p_low or "unlimited" in p_low
-        clauses.append(ClauseAnalysis(
-            clause_id="sec_indemnification_liability",
-            clause_title="Indemnification and Limitation of Liability",
-            original_text=indem_para[:500],
-            plain_english="You are required to defend and pay for legal claims against the counterparty, with potentially unlimited personal liability while their liability is capped or eliminated.",
-            risk_level="CRITICAL" if is_crit else "HIGH",
-            risk_reasoning="One-sided indemnification without liability caps exposes your business or personal finances to catastrophic third-party litigation costs.",
-            suggested_redline="Each party shall mutually indemnify the other against third-party claims arising from gross negligence or willful misconduct. Each party's total aggregate liability shall be capped at the total fees paid under this Agreement.",
-            negotiation_tip="Cap total liability at the total contract value and ensure indemnification is reciprocal and excludes company negligence.",
-        ))
+        is_crit = "uncapped" in p_low or "zero liability" in p_low or "regardless of" in p_low or "unlimited" in p_low or "अमर्यादित" in p_low
+        if detected_lang == "Marathi":
+            clauses.append(ClauseAnalysis(
+                clause_id="sec_indemnification_liability",
+                clause_title="नुकसान भरपाई आणि दायित्व मर्यादा",
+                original_text=indem_para[:500],
+                plain_english="दुसऱ्या पक्षाविरुद्ध होणाऱ्या कायदेशीर दाव्यांचा खर्च आणि नुकसान भरपाई देण्याची संपूर्ण जबाबदारी तुमच्यावर टाकली गेली आहे, ज्याला कोणतीही कमाल मर्यादा नाही.",
+                risk_level="CRITICAL" if is_crit else "HIGH",
+                risk_reasoning="अमर्याद नुकसान भरपाईची अट तुमच्यावर प्रचंड आर्थिक भार टाकू शकते, विशेषतः जेव्हा दुसऱ्या पक्षाच्या निष्काळजीपणामुळे वाद निर्माण होतो.",
+                suggested_redline="दोन्ही पक्ष एकमेकांना केवळ थेट निष्काळजीपणामुळे झालेल्या नुकसानीसाठी भरपाई देतील. एकूण कायदेशीर दायित्व या कराराखालील एकूण शुल्कापर्यंत मर्यादित राहील.",
+                negotiation_tip="दायित्वाला एकूण कराराच्या रकमेची कमाल मर्यादा (Liability Cap) घालण्याचा आग्रह धरा.",
+            ))
+        else:
+            clauses.append(ClauseAnalysis(
+                clause_id="sec_indemnification_liability",
+                clause_title="Indemnification and Limitation of Liability",
+                original_text=indem_para[:500],
+                plain_english="You are required to defend and pay for legal claims against the counterparty, with potentially unlimited personal liability while their liability is capped or eliminated.",
+                risk_level="CRITICAL" if is_crit else "HIGH",
+                risk_reasoning="One-sided indemnification without liability caps exposes your business or personal finances to catastrophic third-party litigation costs.",
+                suggested_redline="Each party shall mutually indemnify the other against third-party claims arising from gross negligence or willful misconduct. Each party's total aggregate liability shall be capped at the total fees paid under this Agreement.",
+                negotiation_tip="Cap total liability at the total contract value and ensure indemnification is reciprocal and excludes company negligence.",
+            ))
 
-    # 4. Compensation / Payment
-    comp_para = find_best_para(["compensation", "payment", "sole discretion", "invoice", "fees", "monthly"])
+    # 4. Compensation / Payment / Deposit
+    comp_para = find_best_para(["compensation", "payment", "sole discretion", "invoice", "fees", "monthly", "भाडे", "ठेव", "डिपॉझिट", "रक्कम", "परतावा"])
     if comp_para and comp_para != term_para:
         p_low = comp_para.lower()
-        is_high = "sole discretion" in p_low or "satisfaction" in p_low or "dispute" in p_low
-        clauses.append(ClauseAnalysis(
-            clause_id="sec_compensation",
-            clause_title="Payment Terms and Invoicing",
-            original_text=comp_para[:500],
-            plain_english="Payment may be subject to subjective approval or discretionary delays rather than objective deliverable completion.",
-            risk_level="HIGH" if is_high else "MEDIUM",
-            risk_reasoning="Subjective satisfaction standards empower the counterparty to withhold payments arbitrarily after work has been completed.",
-            suggested_redline="Invoices shall be payable within thirty (30) days of receipt. Deliverables shall be deemed accepted unless written notice of specific deficiencies is provided within ten (10) business days.",
-            negotiation_tip="Establish Net 15 or Net 30 payment milestones and deemed acceptance windows.",
-        ))
-
-    # 5. Non-Compete / Restrictive Covenants
-    nc_para = find_best_para(["non-compete", "compete", "solicit", "exclusive", "restrict"])
-    if nc_para:
-        clauses.append(ClauseAnalysis(
-            clause_id="sec_restrictive_covenants",
-            clause_title="Non-Competition and Exclusivity Covenants",
-            original_text=nc_para[:500],
-            plain_english="The contract restricts your ability to work with other clients, competitors, or in similar industries during or after this engagement.",
-            risk_level="HIGH",
-            risk_reasoning="Post-engagement non-compete covenants restrict your constitutional right to practice your profession and generate independent income.",
-            suggested_redline="Contractor retains the right to provide services to any other clients provided such services do not disclose Company's confidential information.",
-            negotiation_tip="Strike post-termination non-compete clauses entirely or narrow them strictly to direct active solicitation of named existing clients.",
-        ))
+        is_high = "sole discretion" in p_low or "satisfaction" in p_low or "dispute" in p_low or "जप्त" in p_low
+        if detected_lang == "Marathi":
+            clauses.append(ClauseAnalysis(
+                clause_id="sec_compensation",
+                clause_title="मोबदला, भाडे आणि अनामत रक्कम",
+                original_text=comp_para[:500],
+                plain_english="रक्कम देणे किंवा अनामत रकमेचा परतावा हा स्पष्ट निकषांऐवजी एकांगी अटींवर किंवा विलंबावर अवलंबून राहू शकतो.",
+                risk_level="HIGH" if is_high else "MEDIUM",
+                risk_reasoning="मोबदला किंवा अनामत रकमेच्या परताव्याची निश्चित कालमर्यादा नसल्यास वाद निर्माण होण्याची दाट शक्यता असते.",
+                suggested_redline="सर्व देयके पावती मिळाल्यापासून ३० दिवसांच्या आत दिली जातील आणि करार संपल्यावर अनामत रक्कम १५ दिवसांत परत केली जाईल.",
+                negotiation_tip="पेमेंट आणि अनामत रक्कम परत करण्याचे स्पष्ट वेळापत्रक ठरवून घ्या.",
+            ))
+        else:
+            clauses.append(ClauseAnalysis(
+                clause_id="sec_compensation",
+                clause_title="Payment Terms and Invoicing",
+                original_text=comp_para[:500],
+                plain_english="Payment may be subject to subjective approval or discretionary delays rather than objective deliverable completion.",
+                risk_level="HIGH" if is_high else "MEDIUM",
+                risk_reasoning="Subjective satisfaction standards empower the counterparty to withhold payments arbitrarily after work has been completed.",
+                suggested_redline="Invoices shall be payable within thirty (30) days of receipt. Deliverables shall be deemed accepted unless written notice of specific deficiencies is provided within ten (10) business days.",
+                negotiation_tip="Establish Net 15 or Net 30 payment milestones and deemed acceptance windows.",
+            ))
 
     # If no standard paragraphs detected, add generic breakdown
     if not clauses:
-        clauses.append(ClauseAnalysis(
-            clause_id="sec_general_terms",
-            clause_title="General Contractual Obligations",
-            original_text=text[:400],
-            plain_english="Standard contractual terms outlining duties, rights, and performance standards between the signatories.",
-            risk_level="MEDIUM",
-            risk_reasoning="Legal agreements contain binding covenants that should be scrutinized for mutual reciprocity and clear dispute resolution.",
-            suggested_redline="Both parties agree to perform duties in accordance with industry standards, with reasonable opportunity to cure any alleged non-conformance.",
-            negotiation_tip="Review all operational and financial deadlines to verify they are practical and commercially reasonable.",
-        ))
+        if detected_lang == "Marathi":
+            clauses.append(ClauseAnalysis(
+                clause_id="sec_general_terms",
+                clause_title="सामान्य कराराच्या अटी व शर्ती",
+                original_text=text[:400],
+                plain_english="करारातील दोन्ही पक्षांचे अधिकार, कर्तव्ये आणि जबाबदाऱ्या ठरवणाऱ्या मूलभूत कायदेशीर अटी.",
+                risk_level="MEDIUM",
+                risk_reasoning="प्रत्येक कायदेशीर करारामध्ये अटी दोन्ही बाजूंच्या हिताचे रक्षण करणाऱ्या असणे आवश्यक आहे.",
+                suggested_redline="दोन्ही पक्ष मान्य केलेल्या अटींनुसार काम करतील आणि तक्रार निवारणासाठी वाजवी संधी दिली जाईल.",
+                negotiation_tip="सर्व अटी आणि मुदती व्यावहारिक आहेत का ते तपासून घ्या.",
+            ))
+        else:
+            clauses.append(ClauseAnalysis(
+                clause_id="sec_general_terms",
+                clause_title="General Contractual Obligations",
+                original_text=text[:400],
+                plain_english="Standard contractual terms outlining duties, rights, and performance standards between the signatories.",
+                risk_level="MEDIUM",
+                risk_reasoning="Legal agreements contain binding covenants that should be scrutinized for mutual reciprocity and clear dispute resolution.",
+                suggested_redline="Both parties agree to perform duties in accordance with industry standards, with reasonable opportunity to cure any alleged non-conformance.",
+                negotiation_tip="Review all operational and financial deadlines to verify they are practical and commercially reasonable.",
+            ))
 
     # Calculate overall risk score
     crit_count = sum(1 for c in clauses if c.risk_level == "CRITICAL")
@@ -236,7 +310,32 @@ def generate_fallback_analysis(text: str, reason: str = "") -> ContractAnalysisR
     med_count = sum(1 for c in clauses if c.risk_level == "MEDIUM")
     calc_score = min(98, max(25, (crit_count * 32) + (high_count * 20) + (med_count * 10)))
 
+    if detected_lang == "Marathi":
+        return ContractAnalysisResult(
+            detected_language="Marathi",
+            document_title=doc_title,
+            parties_involved=parties,
+            overall_risk_score=calc_score,
+            risk_summary=(
+                f"या करारामध्ये {len(clauses)} प्रमुख जोखीम कलमे आढळली आहेत ({crit_count} गंभीर आणि {high_count} उच्च जोखीम). "
+                f"मुख्य जोखीम एकतर्फी समाप्ती, नुकसान भरपाई आणि देय रकमेच्या तरतुदींशी संबंधित आहे."
+            ),
+            clauses=clauses,
+            action_checklist=[
+                "करार संपवण्यापूर्वी किमान ३० दिवसांची पूर्वसूचना देण्याची तरतूद करा.",
+                "स्वतःच्या पूर्व-अस्तित्वात असलेल्या बौद्धिक संपदेचे संरक्षण सुनिश्चित करा.",
+                "नुकसान भरपाईच्या दायित्वाला (Liability) एकूण रकमेची कमाल मर्यादा घाला.",
+                "पेमेंट आणि अनामत रकमेच्या परताव्याची निश्चित कालमर्यादा ठरवा.",
+            ],
+            attorney_prep_questions=[
+                "स्थानिक कायद्यानुसार या करारातील एकतर्फी अटी कायदेशीरदृष्ट्या वैध आहेत का?",
+                "नुकसान भरपाईच्या अटी परस्पर आणि वाजवी कशा करता येतील?",
+                "करार अचानक संपुष्टात आल्यास देय रक्कम मिळण्यासाठी काय कायदेशीर तरतुदी आहेत?",
+            ],
+        )
+
     return ContractAnalysisResult(
+        detected_language=detected_lang,
         document_title=doc_title,
         parties_involved=parties,
         overall_risk_score=calc_score,

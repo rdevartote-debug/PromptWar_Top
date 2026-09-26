@@ -12,6 +12,7 @@ export interface ClauseAnalysis {
 }
 
 export interface ContractAnalysisResult {
+  detected_language?: string;
   document_title: string;
   parties_involved: string[];
   overall_risk_score: number;

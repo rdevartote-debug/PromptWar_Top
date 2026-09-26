@@ -44,7 +44,11 @@ export const AnalysisLoader: React.FC<AnalysisLoaderProps> = ({ fileName }) => {
   const progressPercent = Math.min(100, Math.round(((currentStage + 1) / STAGES.length) * 90) + 5);
 
   return (
-    <div className="relative overflow-hidden rounded-3xl border border-indigo-500/30 bg-slate-900/90 p-8 sm:p-12 backdrop-blur-2xl shadow-2xl shadow-indigo-950/50 text-center max-w-2xl mx-auto">
+    <div
+      role="status"
+      aria-live="polite"
+      className="relative overflow-hidden rounded-3xl border border-indigo-500/30 bg-slate-900/90 p-8 sm:p-12 backdrop-blur-2xl shadow-2xl shadow-indigo-950/50 text-center max-w-2xl mx-auto"
+    >
       {/* Background glow effects */}
       <div className="absolute -left-20 -top-20 h-64 w-64 rounded-full bg-indigo-500/20 blur-3xl pointer-events-none" />
       <div className="absolute -right-20 -bottom-20 h-64 w-64 rounded-full bg-cyan-500/20 blur-3xl pointer-events-none" />

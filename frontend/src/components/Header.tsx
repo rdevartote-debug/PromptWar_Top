@@ -99,12 +99,13 @@ export const Header: React.FC<HeaderProps> = ({ data, mode, onNewScan }) => {
         </div>
 
         {/* Header Actions */}
-        <div className="flex items-center gap-2.5">
+        <nav aria-label="Document Actions" className="flex items-center gap-2.5">
           {data && (
             <>
               {/* Upload Another Contract */}
               <button
                 onClick={onNewScan}
+                aria-label="Upload another contract document"
                 className="inline-flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-200 shadow-sm transition hover:bg-slate-800 hover:text-white"
               >
                 <Upload className="h-3.5 w-3.5 text-indigo-400" />
@@ -115,6 +116,7 @@ export const Header: React.FC<HeaderProps> = ({ data, mode, onNewScan }) => {
               <button
                 onClick={handleDownloadPdf}
                 disabled={isDownloadingPdf}
+                aria-label="Download Executive PDF Analysis Report"
                 className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-75 disabled:cursor-not-allowed px-3.5 py-1.5 text-xs font-bold text-white transition shadow-sm"
                 title="Download Server-Generated Executive PDF Report"
               >
@@ -135,6 +137,7 @@ export const Header: React.FC<HeaderProps> = ({ data, mode, onNewScan }) => {
               <button
                 onClick={handleDownloadDocx}
                 disabled={isDownloadingDocx}
+                aria-label="Export Amended Word Document with Track Changes"
                 className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/40 bg-emerald-600/15 hover:bg-emerald-600/25 disabled:opacity-75 disabled:cursor-not-allowed px-3.5 py-1.5 text-xs font-bold text-emerald-300 hover:text-white transition shadow-sm"
                 title="Export Amended Agreement as Word (.docx) with Track-Changes styling"
               >
@@ -151,9 +154,8 @@ export const Header: React.FC<HeaderProps> = ({ data, mode, onNewScan }) => {
                 )}
               </button>
             </>
-
           )}
-        </div>
+        </nav>
       </div>
 
       {/* Temporary Error Toast */}

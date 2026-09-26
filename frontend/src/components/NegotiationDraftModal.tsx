@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   X,
   Mail,
@@ -58,30 +58,14 @@ export const NegotiationDraftModal: React.FC<NegotiationDraftModalProps> = ({
   const [editableSubject, setEditableSubject] = useState('');
 
   // Sync default party names when clause changes
-  useEffect(() => {
+  const [prevClauseId, setPrevClauseId] = useState<string | null>(null);
+  if (clause && clause.clause_id !== prevClauseId) {
+    setPrevClauseId(clause.clause_id);
     if (defaultCounterparty) setCounterpartyName(defaultCounterparty);
     if (defaultUserRole) setUserRole(defaultUserRole);
-  }, [defaultCounterparty, defaultUserRole, clause]);
+  }
 
-  // Generate drafts whenever modal opens for a clause
-  useEffect(() => {
-    if (isOpen && clause) {
-      handleGenerateDrafts();
-    }
-  }, [isOpen, clause]);
-
-  // Handle ESC key to close modal
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) {
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
-
-  const handleGenerateDrafts = async () => {
+  const handleGenerateDrafts = useCallback(async () => {
     if (!clause) return;
     setIsLoading(true);
     setErrorMessage(null);
@@ -107,7 +91,77 @@ export const NegotiationDraftModal: React.FC<NegotiationDraftModalProps> = ({
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [clause, counterpartyName, userRole]);
+
+  // Generate drafts whenever modal opens for a clause
+  useEffect(() => {
+    if (isOpen && clause) {
+      const timer = setTimeout(() => {
+        handleGenerateDrafts();
+      }, 0);
+      return () => clearTimeout(timer);
+    }
+  }, [isOpen, clause, handleGenerateDrafts]);
+
+  const modalRef = React.useRef<HTMLDivElement>(null);
+  const previousActiveElementRef = React.useRef<HTMLElement | null>(null);
+
+  // Focus trap and keyboard ESC handler
+  useEffect(() => {
+    if (!isOpen) return;
+
+    previousActiveElementRef.current = document.activeElement as HTMLElement | null;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+        return;
+      }
+
+      if (e.key === 'Tab') {
+        const modal = modalRef.current;
+        if (!modal) return;
+
+        const focusableElements = modal.querySelectorAll<HTMLElement>(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        );
+        if (focusableElements.length === 0) return;
+
+        const firstElement = focusableElements[0];
+        const lastElement = focusableElements[focusableElements.length - 1];
+
+        if (e.shiftKey) {
+          if (document.activeElement === firstElement) {
+            e.preventDefault();
+            lastElement.focus();
+          }
+        } else {
+          if (document.activeElement === lastElement) {
+            e.preventDefault();
+            firstElement.focus();
+          }
+        }
+      }
+    };
+
+    // Auto-focus first focusable element inside modal
+    const focusTimer = setTimeout(() => {
+      if (modalRef.current) {
+        const firstFocusable = modalRef.current.querySelector<HTMLElement>(
+          'button, input, textarea, [tabindex]:not([tabindex="-1"])'
+        );
+        firstFocusable?.focus();
+      }
+    }, 50);
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      clearTimeout(focusTimer);
+      window.removeEventListener('keydown', handleKeyDown);
+      previousActiveElementRef.current?.focus?.();
+    };
+  }, [isOpen, onClose]);
 
   const handleCopy = async (text: string, type: 'subject' | 'body' | 'chat') => {
     try {
@@ -148,8 +202,14 @@ export const NegotiationDraftModal: React.FC<NegotiationDraftModalProps> = ({
   const currentChatContent = tone === 'diplomatic' ? editableChatDiplomatic : editableChatFirm;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="draft-modal-title"
+    >
       <div
+        ref={modalRef}
         className="relative w-full max-w-3xl rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl shadow-black/60 overflow-hidden flex flex-col max-h-[92vh]"
         onClick={(e) => e.stopPropagation()}
       >
@@ -161,7 +221,7 @@ export const NegotiationDraftModal: React.FC<NegotiationDraftModalProps> = ({
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-base sm:text-lg font-bold text-white tracking-tight">
+                <h3 id="draft-modal-title" className="text-base sm:text-lg font-bold text-white tracking-tight">
                   Negotiation Draft Generator
                 </h3>
                 <span className="rounded-full bg-indigo-500/10 border border-indigo-500/30 px-2 py-0.5 text-[10px] font-bold text-indigo-300">
@@ -178,6 +238,7 @@ export const NegotiationDraftModal: React.FC<NegotiationDraftModalProps> = ({
             onClick={onClose}
             className="rounded-xl p-2 text-slate-400 hover:bg-slate-800 hover:text-white transition"
             title="Close modal"
+            aria-label="Close modal"
           >
             <X className="h-5 w-5" />
           </button>

@@ -9,18 +9,17 @@ backend_dir = Path(__file__).resolve().parent
 if str(backend_dir) not in sys.path:
     sys.path.insert(0, str(backend_dir))
 
-from fastapi import FastAPI, File, UploadFile, HTTPException, status
-from fastapi.responses import StreamingResponse
+from fastapi import FastAPI, File, UploadFile, HTTPException, status, Request
+from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 import pypdf
 import docx
 from typing import Optional, Literal, List
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 from dotenv import load_dotenv
-
-from docx import Document
-from docx.shared import Inches, Pt, RGBColor
-from docx.enum.text import WD_ALIGN_PARAGRAPH
 
 from analyze_contract import (
     analyze_contract_text,
@@ -32,6 +31,8 @@ from analyze_contract import (
 from generate_report import generate_report_pdf
 from generate_docx import generate_docx_track_changes
 
+# Maximum allowed file upload size: 15 MB
+MAX_FILE_SIZE_BYTES = 15 * 1024 * 1024
 
 
 # ==============================================================================
@@ -39,14 +40,24 @@ from generate_docx import generate_docx_track_changes
 # ==============================================================================
 
 class NegotiationDraftRequest(BaseModel):
-    clause_title: str
-    original_text: str
-    suggested_redline: str
-    counterparty_name: Optional[str] = "Client / Landlord"
-    user_role: Optional[str] = "Contractor / Tenant"
+    """Payload for generating diplomatic and firm negotiation counter-proposals."""
+    clause_title: str = Field(..., min_length=2, max_length=200, description="Clause title")
+    original_text: str = Field(..., min_length=5, max_length=15000, description="Original contract clause")
+    suggested_redline: str = Field(..., min_length=5, max_length=15000, description="Counter-proposal redline")
+    counterparty_name: Optional[str] = Field(default="Client / Landlord", max_length=150)
+    user_role: Optional[str] = Field(default="Contractor / Tenant", max_length=150)
+
+    @field_validator("clause_title", "original_text", "suggested_redline", mode="before")
+    @classmethod
+    def sanitize_strings(cls, v: str) -> str:
+        """Strip whitespace and enforce string hygiene."""
+        if isinstance(v, str):
+            return v.strip()
+        return v
 
 
 class NegotiationDraftResponse(BaseModel):
+    """Multi-channel, multi-tone structured negotiation draft outputs."""
     email_subject: str
     email_diplomatic: str
     email_firm: str
@@ -59,11 +70,29 @@ class NegotiationDraftResponse(BaseModel):
 # ==============================================================================
 
 class ScenarioRequest(BaseModel):
-    scenario_query: str
+    """Payload for evaluating a hypothetical user scenario against an analyzed contract."""
+    scenario_query: str = Field(
+        ...,
+        min_length=3,
+        max_length=500,
+        description="Hypothetical situation or question to simulate against contract terms"
+    )
     contract_data: ContractAnalysisResult
+
+    @field_validator("scenario_query", mode="before")
+    @classmethod
+    def sanitize_scenario_query(cls, v: str) -> str:
+        """Strip leading/trailing whitespace and validate length."""
+        if isinstance(v, str):
+            cleaned = v.strip()
+            if len(cleaned) < 3:
+                raise ValueError("Scenario query must be at least 3 characters after trimming.")
+            return cleaned
+        return v
 
 
 class ScenarioSimulationResponse(BaseModel):
+    """Deterministic simulation results including badge, quote, and advice."""
     scenario_query: str
     verdict_badge: Literal["SAFE", "AT_RISK", "SEVERE_PENALTY", "UNADDRESSED"]
     direct_consequence: str
@@ -77,10 +106,10 @@ class ScenarioSimulationResponse(BaseModel):
 # ==============================================================================
 
 class DocxExportRequest(BaseModel):
-    document_title: str
+    """Payload for generating a Word document (.docx) with Track-Changes styling."""
+    document_title: str = Field(default="Contract Agreement", max_length=250)
     original_full_text: Optional[str] = ""
     clauses: List[ClauseAnalysis]
-
 
 
 # Load environment variables
@@ -88,11 +117,17 @@ load_dotenv()
 load_dotenv(Path(__file__).parent.parent / ".env")
 load_dotenv(Path(__file__).parent / ".env")
 
+# Initialize Slowapi Rate Limiter
+limiter = Limiter(key_func=get_remote_address)
+
 app = FastAPI(
     title="LegalDoc.AI Contract Analysis API",
-    description="Deterministic contract risk assessment and plain-English translation engine",
+    description="Deterministic contract risk assessment, native language translation, and redline negotiation engine",
     version="1.0.0",
 )
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Configure CORS to allow frontend connections
 origins = [
@@ -188,11 +223,14 @@ async def health_check():
     }
 
 
-@app.post("/api/analyze", response_model=ContractAnalysisResult)
-async def analyze_contract(file: UploadFile = File(...)):
+@app.post("/api/analyze", response_model=ContractAnalysisResult, response_class=JSONResponse)
+@limiter.limit("10/minute")
+async def analyze_contract(request: Request, file: UploadFile = File(...)):
     """
     Analyzes an uploaded contract document (.pdf, .docx, .txt) and returns
-    structured risk evaluation, redlines, and plain-English translation.
+    structured risk evaluation, redlines, and plain language translation
+    in the document's native language with preserved UTF-8 encoding.
+    Protected by 10 req/min rate limit and 15MB file size limit.
     """
     filename = file.filename or "unknown_contract.txt"
     ext = Path(filename).suffix.lower()
@@ -217,6 +255,12 @@ async def analyze_contract(file: UploadFile = File(...)):
             detail="The uploaded file is empty.",
         )
 
+    if len(content) > MAX_FILE_SIZE_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Uploaded file exceeds maximum limit of 15MB (received {len(content)} bytes).",
+        )
+
     extracted_text = extract_text_from_file(filename, content)
 
     if not extracted_text or len(extracted_text.strip()) < 20:
@@ -227,7 +271,10 @@ async def analyze_contract(file: UploadFile = File(...)):
 
     try:
         result = await asyncio.to_thread(analyze_contract_text, extracted_text)
-        return result
+        return JSONResponse(
+            content=result.model_dump(),
+            media_type="application/json; charset=utf-8"
+        )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -317,11 +364,12 @@ async def draft_negotiation_message(req: NegotiationDraftRequest):
 
 
 @app.post("/api/simulate-scenario", response_model=ScenarioSimulationResponse)
-async def simulate_contract_scenario(req: ScenarioRequest):
-
+@limiter.limit("10/minute")
+async def simulate_contract_scenario(request: Request, req: ScenarioRequest):
     """
     Simulates a 'What If?' hypothetical scenario against the analyzed contract,
     returning a grounded consequence analysis with direct clause citations and verdict badge.
+    Protected by 10 req/min rate limit.
     """
     try:
         response = await asyncio.to_thread(simulate_scenario, req)
