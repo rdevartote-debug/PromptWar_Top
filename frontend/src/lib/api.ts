@@ -133,14 +133,23 @@ export async function downloadPdfReport(analysis: ContractAnalysisResult): Promi
 
     let filename = 'LegalDoc_Analysis_Report.pdf';
     const disposition = response.headers.get('Content-Disposition');
-    if (disposition && disposition.includes('filename=')) {
-      const match = disposition.match(/filename="?([^";]+)"?/);
-      if (match && match[1]) {
-        filename = match[1];
+    if (disposition) {
+      const utf8Match = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+      if (utf8Match && utf8Match[1]) {
+        try {
+          filename = decodeURIComponent(utf8Match[1]);
+        } catch {
+          // fallback
+        }
+      } else {
+        const match = disposition.match(/filename="?([^";]+)"?/);
+        if (match && match[1]) {
+          filename = match[1];
+        }
       }
     } else if (analysis.document_title) {
       const safeTitle = analysis.document_title
-        .replace(/[^a-zA-Z0-9_-]/g, '_')
+        .replace(/[^a-zA-Z0-9_\u0900-\u097F-]/g, '_')
         .replace(/_+/g, '_')
         .substring(0, 30);
       filename = `LegalDoc_${safeTitle}_Report.pdf`;
@@ -201,14 +210,23 @@ export async function downloadDocxRedline(req: DocxExportRequest): Promise<void>
 
     let filename = 'LegalDoc_Amended_Redline.docx';
     const disposition = response.headers.get('Content-Disposition');
-    if (disposition && disposition.includes('filename=')) {
-      const match = disposition.match(/filename="?([^";]+)"?/);
-      if (match && match[1]) {
-        filename = match[1];
+    if (disposition) {
+      const utf8Match = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+      if (utf8Match && utf8Match[1]) {
+        try {
+          filename = decodeURIComponent(utf8Match[1]);
+        } catch {
+          // fallback
+        }
+      } else {
+        const match = disposition.match(/filename="?([^";]+)"?/);
+        if (match && match[1]) {
+          filename = match[1];
+        }
       }
     } else if (req.document_title) {
       const safeTitle = req.document_title
-        .replace(/[^a-zA-Z0-9_-]/g, '_')
+        .replace(/[^a-zA-Z0-9_\u0900-\u097F-]/g, '_')
         .replace(/_+/g, '_')
         .substring(0, 30);
       filename = `LegalDoc_${safeTitle}_Amended_Redline.docx`;

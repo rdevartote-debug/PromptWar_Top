@@ -2,6 +2,7 @@ import io
 import os
 import sys
 import asyncio
+import urllib.parse
 from pathlib import Path
 
 # Ensure the backend directory is in sys.path so sibling imports work everywhere
@@ -286,20 +287,28 @@ async def analyze_contract(request: Request, file: UploadFile = File(...)):
 async def export_pdf_report(analysis: ContractAnalysisResult):
     """
     Generates an executive, styled PDF report of the contract risk analysis.
+    Safely encodes native Unicode titles using RFC 5987 to prevent latin-1 header errors.
     """
     try:
         pdf_buffer = await asyncio.to_thread(generate_report_pdf, analysis)
-        doc_slug = "Contract"
-        if analysis.document_title:
-            doc_slug = "".join(c for c in analysis.document_title if c.isalnum() or c in (" ", "_", "-")).strip()
-            doc_slug = doc_slug.replace(" ", "_")[:30] or "Contract"
-        filename = f"LegalDoc_{doc_slug}_Report.pdf"
+
+        raw_title = (analysis.document_title or "Contract").strip()
+        # 1. Pure ASCII fallback filename for RFC 7230 / Starlette latin-1 header safety
+        ascii_slug = "".join(c for c in raw_title if c.isascii() and (c.isalnum() or c in (" ", "_", "-"))).strip()
+        ascii_slug = ascii_slug.replace(" ", "_")[:30] or "Contract"
+        fallback_filename = f"LegalDoc_{ascii_slug}_Report.pdf"
+
+        # 2. RFC 5987 / RFC 6266 UTF-8 encoded filename for modern browsers
+        safe_utf8_title = raw_title.replace('"', '').replace('/', '_').replace('\\', '_')[:50].strip() or "Contract"
+        encoded_filename = urllib.parse.quote(f"LegalDoc_{safe_utf8_title}_Report.pdf")
+
+        content_disposition = f'attachment; filename="{fallback_filename}"; filename*=UTF-8\'\'{encoded_filename}'
 
         return StreamingResponse(
             pdf_buffer,
             media_type="application/pdf",
             headers={
-                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Content-Disposition": content_disposition,
                 "Access-Control-Expose-Headers": "Content-Disposition",
             },
         )
@@ -317,6 +326,7 @@ async def export_docx_amended_agreement(req: DocxExportRequest):
     - Struck-through deleted terms in red
     - Underlined, highlighted counter-proposals in green
     - Plain-English rationale and negotiation annotations
+    Safely encodes native Unicode titles using RFC 5987 to prevent latin-1 header errors.
     """
     try:
         docx_buffer = await asyncio.to_thread(
@@ -325,17 +335,24 @@ async def export_docx_amended_agreement(req: DocxExportRequest):
             clauses=req.clauses,
             original_full_text=req.original_full_text or "",
         )
-        doc_slug = "Contract"
-        if req.document_title:
-            doc_slug = "".join(c for c in req.document_title if c.isalnum() or c in (" ", "_", "-")).strip()
-            doc_slug = doc_slug.replace(" ", "_")[:30] or "Contract"
-        filename = f"LegalDoc_{doc_slug}_Amended_Redline.docx"
+
+        raw_title = (req.document_title or "Contract").strip()
+        # 1. Pure ASCII fallback filename for RFC 7230 / Starlette latin-1 header safety
+        ascii_slug = "".join(c for c in raw_title if c.isascii() and (c.isalnum() or c in (" ", "_", "-"))).strip()
+        ascii_slug = ascii_slug.replace(" ", "_")[:30] or "Contract"
+        fallback_filename = f"LegalDoc_{ascii_slug}_Amended_Redline.docx"
+
+        # 2. RFC 5987 / RFC 6266 UTF-8 encoded filename for modern browsers
+        safe_utf8_title = raw_title.replace('"', '').replace('/', '_').replace('\\', '_')[:50].strip() or "Contract"
+        encoded_filename = urllib.parse.quote(f"LegalDoc_{safe_utf8_title}_Amended_Redline.docx")
+
+        content_disposition = f'attachment; filename="{fallback_filename}"; filename*=UTF-8\'\'{encoded_filename}'
 
         return StreamingResponse(
             docx_buffer,
             media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             headers={
-                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Content-Disposition": content_disposition,
                 "Access-Control-Expose-Headers": "Content-Disposition",
             },
         )
