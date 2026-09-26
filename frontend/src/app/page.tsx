@@ -11,6 +11,8 @@ import { ActionSidebar } from '@/components/ActionSidebar';
 import { FileUploadZone } from '@/components/FileUploadZone';
 import { AnalysisLoader } from '@/components/AnalysisLoader';
 import { LegalDisclaimerBanner } from '@/components/LegalDisclaimerBanner';
+import { ScenarioSimulator } from '@/components/ScenarioSimulator';
+
 import {
   Filter,
   Layers,
@@ -171,8 +173,12 @@ export default function DashboardPage() {
                   criticalCount={counts.critical}
                 />
 
-                {/* 2. Clause Severity Filter Bar */}
+                {/* 2. Feature 3: The "What If?" Scenario Simulator */}
+                <ScenarioSimulator contractData={contractData} />
+
+                {/* 3. Clause Severity Filter Bar */}
                 <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-900/70 p-3 backdrop-blur-md">
+
                   <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-400 pl-1">
                     <Filter className="h-4 w-4 text-indigo-400" />
                     <span>Filter Clauses by Severity</span>
@@ -254,9 +260,12 @@ export default function DashboardPage() {
                         key={clause.clause_id}
                         clause={clause}
                         index={idx + 1}
+                        counterpartyName={contractData.parties_involved?.[0] || 'Client / Landlord'}
+                        userRole={contractData.parties_involved?.[1] || 'Contractor / Tenant'}
                       />
                     ))
                   ) : (
+
                     <div className="rounded-2xl border border-dashed border-slate-800 bg-slate-900/40 p-8 text-center">
                       <p className="text-sm font-medium text-slate-400">
                         No clauses found matching the selected risk filter ({selectedFilter}).
@@ -277,6 +286,7 @@ export default function DashboardPage() {
                 <ActionSidebar
                   actionChecklist={contractData.action_checklist}
                   attorneyQuestions={contractData.attorney_prep_questions}
+                  contractData={contractData}
                 />
               </div>
             </div>

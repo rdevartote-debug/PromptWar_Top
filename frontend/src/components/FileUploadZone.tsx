@@ -9,7 +9,9 @@ import {
   AlertCircle,
   FileCheck,
   ShieldAlert,
+  RefreshCw,
 } from 'lucide-react';
+
 
 interface FileUploadZoneProps {
   onFileSelect: (file: File) => void;
@@ -201,14 +203,45 @@ export const FileUploadZone: React.FC<FileUploadZoneProps> = ({
 
       {/* Error Alert Display */}
       {(localError || errorMessage) && (
-        <div className="flex items-start gap-3 rounded-2xl border border-rose-500/40 bg-rose-950/30 p-4 text-xs text-rose-300">
-          <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-rose-400" />
-          <div className="flex-1">
-            <span className="font-bold">Upload Error: </span>
-            <span>{localError || errorMessage}</span>
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 rounded-2xl border border-rose-500/40 bg-rose-950/30 p-4 text-xs text-rose-300">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-rose-400" />
+            <div className="space-y-1">
+              <div>
+                <span className="font-bold">Upload Error: </span>
+                <span>{localError || errorMessage}</span>
+              </div>
+              {(errorMessage?.includes('FastAPI backend') || errorMessage?.includes('connect')) && (
+                <p className="text-[11px] text-slate-400">
+                  Tip: Start the backend with <code className="bg-slate-900 px-1.5 py-0.5 rounded text-amber-300 font-mono">npm run dev</code> (runs both frontend & backend concurrently) or <code className="bg-slate-900 px-1.5 py-0.5 rounded text-amber-300 font-mono">npm run dev:backend</code>.
+                </p>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {selectedFile && (
+              <button
+                type="button"
+                onClick={handleStartAnalysis}
+                disabled={isLoading}
+                className="shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 px-3 py-1.5 text-xs font-semibold text-white transition shadow-sm"
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+                <span>Retry</span>
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onLoadSample}
+              className="shrink-0 inline-flex items-center gap-1.5 rounded-lg border border-indigo-500/40 bg-indigo-600/20 hover:bg-indigo-600/30 px-3 py-1.5 text-xs font-semibold text-indigo-300 transition shadow-sm"
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              <span>Try Sample</span>
+            </button>
           </div>
         </div>
       )}
+
 
       {/* Quick-Start Demo Banner */}
       <div className="rounded-2xl border border-slate-800/80 bg-slate-900/40 p-5 backdrop-blur-md flex flex-col sm:flex-row items-center justify-between gap-4">

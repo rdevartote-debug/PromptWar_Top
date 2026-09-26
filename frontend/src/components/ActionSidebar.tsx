@@ -11,21 +11,65 @@ import {
   ChevronDown,
   ChevronUp,
   ShieldQuestion,
+  FileText,
+  FileDown,
+  Loader2,
+  DownloadCloud,
 } from 'lucide-react';
+import { ContractAnalysisResult } from '@/types/contract';
+import { downloadDocxRedline, downloadPdfReport } from '@/lib/api';
 
 interface ActionSidebarProps {
   actionChecklist: string[];
   attorneyQuestions: string[];
+  contractData?: ContractAnalysisResult | null;
 }
 
 export const ActionSidebar: React.FC<ActionSidebarProps> = ({
   actionChecklist,
   attorneyQuestions,
+  contractData,
 }) => {
   // Checkbox state for each action item
   const [checkedItems, setCheckedItems] = useState<Record<number, boolean>>({});
   const [isAttorneyBriefOpen, setIsAttorneyBriefOpen] = useState(true);
   const [copiedQuestions, setCopiedQuestions] = useState(false);
+  const [isDownloadingDocx, setIsDownloadingDocx] = useState(false);
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+
+  const handleDownloadDocx = async () => {
+    if (!contractData || isDownloadingDocx) return;
+    setIsDownloadingDocx(true);
+    setExportError(null);
+    try {
+      await downloadDocxRedline({
+        document_title: contractData.document_title,
+        clauses: contractData.clauses,
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to export Word document.';
+      setExportError(msg);
+      setTimeout(() => setExportError(null), 5000);
+    } finally {
+      setIsDownloadingDocx(false);
+    }
+  };
+
+  const handleDownloadPdf = async () => {
+    if (!contractData || isDownloadingPdf) return;
+    setIsDownloadingPdf(true);
+    setExportError(null);
+    try {
+      await downloadPdfReport(contractData);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to download PDF report.';
+      setExportError(msg);
+      setTimeout(() => setExportError(null), 5000);
+    } finally {
+      setIsDownloadingPdf(false);
+    }
+  };
 
   const toggleCheck = (index: number) => {
     setCheckedItems((prev) => ({
@@ -210,6 +254,71 @@ export const ActionSidebar: React.FC<ActionSidebarProps> = ({
           </div>
         )}
       </div>
+
+      {/* 3. Contract Deliverables & Track-Changes Export */}
+      {contractData && (
+        <div className="rounded-2xl border border-slate-800 bg-slate-900/90 p-5 backdrop-blur-xl shadow-xl shadow-black/20 space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+            <div className="flex items-center gap-2">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-600/20 text-emerald-400 border border-emerald-500/30">
+                <DownloadCloud className="h-4 w-4" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white">Negotiation Deliverables</h3>
+                <p className="text-xs text-slate-400">Export redlines & reports</p>
+              </div>
+            </div>
+          </div>
+
+          <p className="text-xs text-slate-400 leading-relaxed">
+            Generate formal documents with Track-Changes redlining or executive PDF summaries ready for counter-proposals.
+          </p>
+
+          <div className="space-y-2.5">
+            {/* Word Track-Changes Export Button */}
+            <button
+              onClick={handleDownloadDocx}
+              disabled={isDownloadingDocx}
+              className="w-full flex items-center justify-center gap-2 rounded-xl border border-emerald-500/40 bg-emerald-950/40 hover:bg-emerald-900/40 text-emerald-300 hover:text-white py-2.5 px-3 text-xs font-bold transition shadow-sm disabled:opacity-75 disabled:cursor-not-allowed"
+            >
+              {isDownloadingDocx ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin text-emerald-400" />
+                  <span>Generating Word (.docx)...</span>
+                </>
+              ) : (
+                <>
+                  <FileText className="h-4 w-4 text-emerald-400" />
+                  <span>Export Amended Word (.docx)</span>
+                </>
+              )}
+            </button>
+
+            {/* Executive PDF Report Button */}
+            <button
+              onClick={handleDownloadPdf}
+              disabled={isDownloadingPdf}
+              className="w-full flex items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-800/80 hover:bg-slate-700/80 text-slate-200 hover:text-white py-2 px-3 text-xs font-semibold transition shadow-sm disabled:opacity-75 disabled:cursor-not-allowed"
+            >
+              {isDownloadingPdf ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin text-indigo-400" />
+                  <span>Generating PDF...</span>
+                </>
+              ) : (
+                <>
+                  <FileDown className="h-4 w-4 text-indigo-400" />
+                  <span>Download Executive PDF</span>
+                </>
+              )}
+            </button>
+          </div>
+
+          {exportError && (
+            <p className="text-[11px] text-rose-400 text-center">{exportError}</p>
+          )}
+        </div>
+      )}
     </div>
   );
 };
